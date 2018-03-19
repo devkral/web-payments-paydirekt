@@ -2,14 +2,10 @@
 
 from __future__ import unicode_literals
 import six
-if six.PY3:
-    # For Python 3.0 and later
-    from urllib.error import URLError
-    from urllib.parse import urlencode
-else:
-    # Fall back to Python 2's urllib2
-    from urllib2 import URLError
-    from urllib import urlencode
+# For Python 3.0 and later
+from urllib.error import URLError
+from urllib.parse import urlencode
+
 
 import uuid
 from datetime import timedelta
