@@ -54,7 +54,6 @@ setup(
       setup_requires=['setuptools_scm'],
       url='http://github.com/devkral/web-payments-paydirekt',
       packages=PACKAGES,
-      include_package_data=True,
       classifiers=[
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
@@ -75,4 +74,4 @@ setup(
       cmdclass={
         'test': PyTest},
       tests_require=TEST_REQUIREMENTS,
-      zip_safe=False)
+      zip_safe=True)
