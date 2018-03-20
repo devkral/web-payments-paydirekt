@@ -10,7 +10,7 @@ TEMPLATES = [{
 SECRET_KEY = 'NOTREALLY'
 PAYMENT_HOST = 'example.com'
 
-INSTALLED_APPS = ['django.contrib.sites', 'web_payments']
+INSTALLED_APPS = ['django.contrib.sites', 'web_payments.django']
 
 
 PAYMENT_VARIANTS_API = {

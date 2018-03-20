@@ -3,14 +3,11 @@ import simplejson as json
 from decimal import Decimal
 
 from unittest import TestCase
-try:
-    from unittest.mock import MagicMock, patch
-except ImportError:
-    from mock import MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from . import PaydirektProvider
-from .. import FraudStatus, PaymentError, PaymentStatus, RedirectNeeded
-from ..testcommon import create_test_payment
+from web_payments import FraudStatus, PaymentError, PaymentStatus, RedirectNeeded
+from web_payments.testcommon import create_test_payment
 
 VARIANT = 'paydirekt'
 API_KEY = '87dbc6cd-91d2-4574-bcb5-2aaaf924386d'

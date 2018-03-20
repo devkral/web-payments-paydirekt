@@ -17,6 +17,13 @@ TEST_REQUIREMENTS = [
     'pytest-django'
 ]
 
+VERSIONING = {
+    'root': '.',
+    'version_scheme': 'post-release',
+    'local_scheme': 'dirty-tag',
+}
+
+
 class PyTest(TestCommand):
     user_options = [('pytest-args=', 'a', "Arguments to pass to py.test")]
     test_args = []
@@ -43,7 +50,8 @@ setup(
       author='Alexander Kaftan',
       author_email='devkral@web.de',
       description='Paydirekt plugin for web-payments-connector',
-      version='1.0.2',
+      use_scm_version=VERSIONING,
+      setup_requires=['setuptools_scm'],
       url='http://github.com/devkral/web-payments-paydirekt',
       packages=PACKAGES,
       include_package_data=True,

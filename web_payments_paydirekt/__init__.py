@@ -1,8 +1,5 @@
 """ paydirekt payment provider """
 
-from __future__ import unicode_literals
-import six
-# For Python 3.0 and later
 from urllib.error import URLError
 from urllib.parse import urlencode
 
@@ -26,9 +23,9 @@ from requests.exceptions import Timeout
 from django.http import HttpResponseRedirect, HttpResponseForbidden, HttpResponseServerError, HttpResponse
 from django.conf import settings
 
-from .. import PaymentError, PaymentStatus, RedirectNeeded
-from ..core import BasicProvider
-from ..utils import split_streetnr
+from web_payments import PaymentError, PaymentStatus, RedirectNeeded
+from web_payments.logic import BasicProvider
+from web_payments.utils import split_streetnr
 
 logger = logging.getLogger(__name__)
 
@@ -110,14 +107,11 @@ class PaydirektProvider(BasicProvider):
         header["X-Auth-Key"] = self.api_key
         header["X-Request-ID"] = token_uuid
 
-        if six.PY3:
-            header["X-Auth-Code"] = str(urlsafe_b64encode(h_temp.digest()), 'ascii')
-        else:
-            header["X-Auth-Code"] = urlsafe_b64encode(h_temp.digest())
+        header["X-Auth-Code"] = str(urlsafe_b64encode(h_temp.digest()), 'ascii')
         header["Date"] = format_timetuple_and_zone(date_now.utctimetuple(), "GMT")
         body = {
             "grantType" : "api_key",
-            "randomNonce" : str(nonce, "ascii") if six.PY3 else nonce
+            "randomNonce" : str(nonce, "ascii")
         }
         try:
             response = requests.post(self.path_token.format(self.endpoint), data=json.dumps(body, use_decimal=True), headers=header, timeout=20)
