@@ -46,7 +46,7 @@ class PyTest(TestCommand):
 
 setup(
       name='web-payments-paydirekt',
-      license="MIT",
+      license="BSD3",
       author='Alexander Kaftan',
       author_email='devkral@web.de',
       description='Paydirekt plugin for web-payments-connector',
@@ -54,6 +54,7 @@ setup(
       setup_requires=['setuptools_scm'],
       url='http://github.com/devkral/web-payments-paydirekt',
       packages=PACKAGES,
+      include_package_data=True,
       classifiers=[
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
