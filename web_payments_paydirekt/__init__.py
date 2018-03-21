@@ -1,11 +1,6 @@
 """ paydirekt payment provider """
 
-from urllib.error import URLError
-from urllib.parse import urlencode
-
-
 import uuid
-from datetime import timedelta
 from datetime import datetime as dt
 
 from decimal import Decimal
@@ -20,14 +15,14 @@ import logging
 
 import requests
 from requests.exceptions import Timeout
-from django.http import HttpResponseRedirect, HttpResponseForbidden, HttpResponseServerError, HttpResponse
-from django.conf import settings
+from django.http import HttpResponseForbidden, HttpResponse
 
 from web_payments import PaymentError, PaymentStatus, RedirectNeeded
 from web_payments.logic import BasicProvider
 from web_payments.utils import split_streetnr
 
 logger = logging.getLogger(__name__)
+
 
 # from email utils, for python 2+3 support
 def format_timetuple_and_zone(timetuple, zone):
@@ -37,7 +32,8 @@ def format_timetuple_and_zone(timetuple, zone):
         ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][timetuple[1] - 1],
         timetuple[0], timetuple[3], timetuple[4], timetuple[5],
-zone)
+        zone)
+
 
 def check_response(response, response_json=None):
     if response.status_code not in [200, 201]:
@@ -49,6 +45,7 @@ def check_response(response, response_json=None):
                 raise PaymentError(str(response.status_code))
         else:
             raise PaymentError(str(response.status_code))
+
 
 # Capture: if False ORDER is used
 class PaydirektProvider(BasicProvider):
@@ -71,7 +68,6 @@ class PaydirektProvider(BasicProvider):
     path_close = "{}/api/checkout/v1/checkouts/{}/close"
     path_refund = "{}/api/checkout/v1/checkouts/{}/refunds"
 
-
     translate_status = {
         "APPROVED": PaymentStatus.CONFIRMED,
         "OPEN": PaymentStatus.PREAUTH,
@@ -85,8 +81,7 @@ class PaydirektProvider(BasicProvider):
         "Content-Type": "application/hal+json;charset=utf-8",
     }
 
-
-    def __init__(self, api_key, secret, endpoint="https://api.sandbox.paydirekt.de", \
+    def __init__(self, api_key, secret, endpoint="https://api.sandbox.paydirekt.de",
                  overcapture=False, default_carttype="PHYSICAL", **kwargs):
         self.secret_b64 = secret.encode('utf-8')
         self.api_key = api_key
@@ -193,7 +188,7 @@ class PaydirektProvider(BasicProvider):
             "state": shipping["country_area"],
             "emailAddress": payment.billing_email
         }
-        #strip Nones
+        # strip Nones
         shipping = {k: v for k, v in shipping.items() if v}
         body = {k: v for k, v in body.items() if v}
 
@@ -211,7 +206,7 @@ class PaydirektProvider(BasicProvider):
 
         check_response(response, json_response)
         payment.transaction_id = json_response["checkoutId"]
-        #payment.attrs = json_response["_links"]
+        # payment.attrs = json_response["_links"]
         payment.save()
         raise RedirectNeeded(json_response["_links"]["approve"]["href"])
 
@@ -222,7 +217,7 @@ class PaydirektProvider(BasicProvider):
             logger.error("paydirekt returned unparseable object")
             return HttpResponseForbidden('FAILED')
         # ignore invalid requests
-        if not "checkoutId" in results:
+        if "checkoutId" not in results:
             return HttpResponse('OK')
         if not payment.transaction_id:
             payment.transaction_id = results["checkoutId"]
@@ -284,7 +279,7 @@ class PaydirektProvider(BasicProvider):
             "callbackUrlStatusUpdates": self.get_return_url(payment)
         }
         try:
-            response = requests.post(self.path_capture.format(self.endpoint, payment.transaction_id), \
+            response = requests.post(self.path_capture.format(self.endpoint, payment.transaction_id),
                                      data=json.dumps(body, use_decimal=True), headers=header, timeout=20)
         except Timeout:
             raise PaymentError("Timeout")
