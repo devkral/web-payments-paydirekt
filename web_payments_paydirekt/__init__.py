@@ -210,31 +210,35 @@ class PaydirektProvider(BasicProvider):
         payment.save()
         raise RedirectNeeded(json_response["_links"]["approve"]["href"])
 
-    def process_data(self, payment, request_parsed):
-        GET, POST = request_parsed
+    def process_data(self, payment, request):
+        try:
+            results = json.loads(request.body, use_decimal=True)
+        except (ValueError, TypeError):
+            logger.error("paydirekt returned unparseable object")
+            return HttpResponseForbidden('FAILED')
         # ignore invalid requests
-        if "checkoutId" not in POST:
+        if "checkoutId" not in results:
             return HttpResponse('OK')
         if not payment.transaction_id:
             payment.transaction_id = results["checkoutId"]
             payment.save()
-        if "checkoutStatus" in POST:
+        if "checkoutStatus" in results:
             if results["checkoutStatus"] == "APPROVED":
                 if self._capture:
                     payment.change_status(PaymentStatus.CONFIRMED)
                 else:
                     payment.change_status(PaymentStatus.PREAUTH)
-            elif POST["checkoutStatus"] == "CLOSED":
+            elif results["checkoutStatus"] == "CLOSED":
                 if payment.status != PaymentStatus.REFUNDED:
                     payment.change_status(PaymentStatus.CONFIRMED)
                 elif payment.status == PaymentStatus.PREAUTH and payment.captured_amount == 0:
                     payment.change_status(PaymentStatus.REFUNDED)
-            elif not POST["checkoutStatus"] in ["OPEN", "PENDING"]:
+            elif not results["checkoutStatus"] in ["OPEN", "PENDING"]:
                 payment.change_status(PaymentStatus.ERROR)
-        elif "refundStatus" in POST:
-            if POST["refundStatus"] == "FAILED":
+        elif "refundStatus" in results:
+            if results["refundStatus"] == "FAILED":
                 logger.error("refund failed, try to recover")
-                amount = self._retrieve_amount("/".join([self.path_refund.format(self.endpoint, payment.transaction_id), POST["transactionId"]]))
+                amount = self._retrieve_amount("/".join([self.path_refund.format(self.endpoint, payment.transaction_id), results["transactionId"]]))
                 if not amount:
                     logger.error("refund recovery failed")
                     payment.change_status(PaymentStatus.ERROR)
@@ -243,11 +247,11 @@ class PaydirektProvider(BasicProvider):
                 payment.captured_amount += amount
                 payment.save()
                 payment.change_status(PaymentStatus.ERROR)
-        elif "captureStatus" in POST:
+        elif "captureStatus" in results:
             # e.g. if not enough money or capture limit reached
-            if POST["captureStatus"] == "FAILED":
+            if results["captureStatus"] == "FAILED":
                 logger.error("capture failed, try to recover")
-                amount = self._retrieve_amount("/".join([self.path_capture.format(self.endpoint, payment.transaction_id), POST["transactionId"]]))
+                amount = self._retrieve_amount("/".join([self.path_capture.format(self.endpoint, payment.transaction_id), results["transactionId"]]))
                 if not amount:
                     logger.error("capture recovery failed")
                     payment.change_status(PaymentStatus.ERROR)
@@ -304,7 +308,7 @@ class PaydirektProvider(BasicProvider):
             payment.change_status(PaymentStatus.REFUNDED)
             try:
                 response = requests.post(self.path_close.format(self.endpoint, payment.transaction_id), \
-                              headers=header)
+                                         headers=header)
             except Timeout:
                 logger.error("Closing order failed")
         return amount
