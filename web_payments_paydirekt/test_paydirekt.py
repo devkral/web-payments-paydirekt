@@ -271,9 +271,7 @@ Payment = create_test_payment(variant=VARIANT, currency='EUR', carttype=None)
 
 class TestPaydirektProvider(TestCase):
 
-    @patch("web_payments.core.get_base_url")
-    def test_direct_sale_response(self, get_base_url):
-        get_base_url.return_value = "https://example.com"
+    def test_direct_sale_response(self):
         payment = Payment(minimumage=0)
         provider = PaydirektProvider(API_KEY, SECRET)
 
@@ -292,9 +290,7 @@ class TestPaydirektProvider(TestCase):
         self.assertEqual(response, True)
         self.assertEqual(payment.status, PaymentStatus.CONFIRMED)
 
-    @patch("web_payments.core.get_base_url")
-    def test_order_response(self, get_base_url):
-        get_base_url.return_value = "https://example.com"
+    def test_order_response(self):
         payment = Payment(minimumage=0)
         provider = PaydirektProvider(API_KEY, SECRET, capture=False)
         request = MagicMock()
@@ -315,9 +311,8 @@ class TestPaydirektProvider(TestCase):
         self.assertEqual(response, True)
         self.assertEqual(payment.status, PaymentStatus.CONFIRMED)
 
-    @patch("web_payments.core.get_base_url")
     @patch("requests.post")
-    def test_checkout_direct(self, mocked_post, get_base_url):
+    def test_checkout_direct(self, mocked_post):
         payment = Payment(minimumage=0)
         provider = PaydirektProvider(API_KEY, SECRET, capture=False)
         def return_url_data(url, *args, **kwargs):
@@ -330,15 +325,13 @@ class TestPaydirektProvider(TestCase):
             else:
                 raise
             return response
-        get_base_url.return_value = "https://example.com"
         mocked_post.side_effect = return_url_data
         with self.assertRaises(RedirectNeeded) as cm:
             provider.get_form(payment)
         self.assertEqual(cm.exception.args[0], "https://paydirekt.de/checkout/#/checkout/6be6a80d-ef67-47c8-a5bd-2461d11da24c")
 
-    @patch("web_payments.core.get_base_url")
     @patch("requests.post")
-    def test_capture_refund(self, mocked_post, get_base_url):
+    def test_capture_refund(self, mocked_post):
         payment = Payment(minimumage=0)
         provider = PaydirektProvider(API_KEY, SECRET, capture=False)
         request = MagicMock()
@@ -359,7 +352,6 @@ class TestPaydirektProvider(TestCase):
             else:
                 raise Exception(url)
             return response
-        get_base_url.return_value = "https://example.com"
         mocked_post.side_effect = return_url_data
 
         ret = provider.capture(payment)
@@ -373,10 +365,9 @@ class TestPaydirektProvider(TestCase):
         self.assertEqual(payment.status, PaymentStatus.REFUNDED)
         self.assertEqual(payment.captured_amount, Decimal("100.0"))
 
-    @patch("web_payments.core.get_base_url")
     @patch("requests.post")
     @patch("requests.get")
-    def test_refund_fail(self, mocked_get, mocked_post, get_base_url):
+    def test_refund_fail(self, mocked_get, mocked_post):
         payment = Payment(minimumage=0)
         provider = PaydirektProvider(API_KEY, SECRET, capture=False)
         def return_get_data(url, *args, **kwargs):
@@ -392,7 +383,6 @@ class TestPaydirektProvider(TestCase):
             else:
                 raise
             return response
-        get_base_url.return_value = "https://example.com"
         mocked_get.side_effect = return_get_data
         mocked_post.side_effect = return_post_data
         request = MagicMock()
@@ -408,10 +398,9 @@ class TestPaydirektProvider(TestCase):
         self.assertEqual(payment.captured_amount, Decimal(100))
         self.assertEqual(payment.status, PaymentStatus.ERROR)
 
-    @patch("web_payments.core.get_base_url")
     @patch("requests.post")
     @patch("requests.get")
-    def test_capture_fail(self, mocked_get, mocked_post, get_base_url):
+    def test_capture_fail(self, mocked_get, mocked_post):
         payment = Payment(minimumage=0, captured_amount=Decimal(100))
         provider = PaydirektProvider(API_KEY, SECRET, capture=False)
         def return_get_data(url, *args, **kwargs):
@@ -428,7 +417,6 @@ class TestPaydirektProvider(TestCase):
             else:
                 raise
             return response
-        get_base_url.return_value = "https://example.com"
         mocked_get.side_effect = return_get_data
         mocked_post.side_effect = return_post_data
         request = MagicMock()

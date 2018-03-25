@@ -10,7 +10,7 @@ PACKAGES = [
     'web_payments_paydirekt']
 
 REQUIREMENTS = [
-    'web-payments-connector>=2.0.0b5<3.0.0a']
+    'web-payments-connector>=2.0.0b6<3.0.0a']
 
 TEST_REQUIREMENTS = [
     'pytest'

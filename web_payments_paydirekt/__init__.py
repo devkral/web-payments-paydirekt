@@ -163,7 +163,7 @@ class PaydirektProvider(BasicProvider):
             "redirectUrlAfterCancellation": payment.get_failure_url(),
             "redirectUrlAfterRejection": payment.get_failure_url(),
             "redirectUrlAfterAgeVerificationFailure": payment.get_failure_url(),
-            "callbackUrlStatusUpdates": self.get_return_url(payment),
+            "callbackUrlStatusUpdates": payment.get_process_url(),
             # email sent anyway (shipping)
             "sha256hashedEmailAddress": str(urlsafe_b64encode(email_hash), 'ascii'),
             "minimumAge": getattr(payment, "minimumage", None)
@@ -272,7 +272,7 @@ class PaydirektProvider(BasicProvider):
         body = {
             "amount": amount,
             "finalCapture": final,
-            "callbackUrlStatusUpdates": self.get_return_url(payment)
+            "callbackUrlStatusUpdates": payment.get_process_url()
         }
         try:
             response = requests.post(self.path_capture.format(self.endpoint, payment.transaction_id),
@@ -290,7 +290,7 @@ class PaydirektProvider(BasicProvider):
         header["Authorization"] = "Bearer %s" % self.retrieve_oauth_token()
         body = {
             "amount": amount,
-            "callbackUrlStatusUpdates": self.get_return_url(payment)
+            "callbackUrlStatusUpdates": payment.get_process_url()
         }
         try:
             response = requests.post(self.path_refund.format(self.endpoint, payment.transaction_id), \
