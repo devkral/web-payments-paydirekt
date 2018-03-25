@@ -6,7 +6,8 @@ from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 from . import PaydirektProvider
-from web_payments import FraudStatus, PaymentError, PaymentStatus, RedirectNeeded
+from web_payments import PaymentError, RedirectNeeded
+from web_payments.status import PaymentStatus
 from web_payments.testcommon import create_test_payment
 
 VARIANT = 'paydirekt'
@@ -81,20 +82,20 @@ checkout_direct_sale = {
   "type" : "DIRECT_SALE",
   "status" : "OPEN",
   "creationTimestamp" : "2017-10-02T08:41:09.728Z",
-  "totalAmount" : 100.0,
-  "shippingAmount" : 3.5,
-  "orderAmount" : 96.5,
+  "totalAmount" : Decimal("100.0"),
+  "shippingAmount" : Decimal("3.5"),
+  "orderAmount" : Decimal("96.5"),
   "refundLimit" : 200,
   "currency" : "EUR",
   "items" : [ {
     "quantity" : 3,
     "name" : "Bobbycar",
     "ean" : "800001303",
-    "price" : 25.99
+    "price" : Decimal("25.99")
   }, {
     "quantity" : 1,
     "name" : "Helm",
-    "price" : 18.53
+    "price" : Decimal("18.53")
   } ],
   "deliveryType" : "STANDARD",
   "shippingAddress" : {
@@ -140,7 +141,7 @@ checkout_order = {
   "type" : "ORDER",
   "status" : "OPEN",
   "creationTimestamp" : "2017-10-02T08:39:26.460Z",
-  "totalAmount" : 100.0,
+  "totalAmount" : 100,
   "shippingAmount" : 2,
   "orderAmount" : 98,
   "refundLimit" : 110,
@@ -149,11 +150,11 @@ checkout_order = {
     "quantity" : 3,
     "name" : "Bobbycar",
     "ean" : "800001303",
-    "price" : 25.99
+    "price" : Decimal("25.99")
   }, {
     "quantity" : 1,
     "name" : "Helm",
-    "price" : 18.53
+    "price" : Decimal("18.53")
   } ],
   "shoppingCartType" : "PHYSICAL",
   "deliveryType" : "STANDARD",
@@ -270,92 +271,95 @@ Payment = create_test_payment(variant=VARIANT, currency='EUR', carttype=None)
 
 class TestPaydirektProvider(TestCase):
 
-
-    def test_direct_sale_response(self):
+    @patch("web_payments.core.get_base_url")
+    def test_direct_sale_response(self, get_base_url):
+        get_base_url.return_value = "https://example.com"
         payment = Payment(minimumage=0)
         provider = PaydirektProvider(API_KEY, SECRET)
 
         request = MagicMock()
         # real request (private data replaced) encountered, should not error and still be in waiting state
-        request.body = json.dumps(sample_request_paydirekt)
+        request.POST = sample_request_paydirekt
         response = provider.process_data(payment, request)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response, True)
         self.assertEqual(payment.status, PaymentStatus.WAITING)
-        request.body = json.dumps(directsale_open_data)
+        request.POST = directsale_open_data
         response = provider.process_data(payment, request)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response, True)
         self.assertEqual(payment.status, PaymentStatus.WAITING)
-        request.body = json.dumps(directsale_approve_data)
+        request.POST = directsale_approve_data
         response = provider.process_data(payment, request)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response, True)
         self.assertEqual(payment.status, PaymentStatus.CONFIRMED)
 
-    def test_order_response(self):
+    @patch("web_payments.core.get_base_url")
+    def test_order_response(self, get_base_url):
+        get_base_url.return_value = "https://example.com"
         payment = Payment(minimumage=0)
         provider = PaydirektProvider(API_KEY, SECRET, capture=False)
-
         request = MagicMock()
-        request.body = json.dumps(order_open_data)
+        request.POST = order_open_data
         response = provider.process_data(payment, request)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response, True)
         self.assertEqual(payment.status, PaymentStatus.WAITING)
-        request.body = json.dumps(order_approve_data)
+        request.POST = order_approve_data
         response = provider.process_data(payment, request)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response, True)
         self.assertEqual(payment.status, PaymentStatus.PREAUTH)
-        request.body = json.dumps(capture_process_data)
+        request.POST = capture_process_data
         response = provider.process_data(payment, request)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response, True)
         self.assertEqual(payment.status, PaymentStatus.PREAUTH)
-        request.body = json.dumps(order_close_data)
+        request.POST = order_close_data
         response = provider.process_data(payment, request)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response, True)
         self.assertEqual(payment.status, PaymentStatus.CONFIRMED)
 
-
-
-
+    @patch("web_payments.core.get_base_url")
     @patch("requests.post")
-    def test_checkout_direct(self, mocked_post):
+    def test_checkout_direct(self, mocked_post, get_base_url):
         payment = Payment(minimumage=0)
         provider = PaydirektProvider(API_KEY, SECRET, capture=False)
         def return_url_data(url, *args, **kwargs):
             response = MagicMock()
             response.status_code = 200
             if url == provider.path_token.format(provider.endpoint):
-                response.text = json.dumps(token_retrieve)
+                response.text = json.dumps(token_retrieve, use_decimal=True)
             elif url == provider.path_checkout.format(provider.endpoint):
-                response.text = json.dumps(checkout_direct_sale)
+                response.text = json.dumps(checkout_direct_sale, use_decimal=True)
             else:
                 raise
             return response
+        get_base_url.return_value = "https://example.com"
         mocked_post.side_effect = return_url_data
         with self.assertRaises(RedirectNeeded) as cm:
             provider.get_form(payment)
         self.assertEqual(cm.exception.args[0], "https://paydirekt.de/checkout/#/checkout/6be6a80d-ef67-47c8-a5bd-2461d11da24c")
 
+    @patch("web_payments.core.get_base_url")
     @patch("requests.post")
-    def test_capture_refund(self, mocked_post):
+    def test_capture_refund(self, mocked_post, get_base_url):
         payment = Payment(minimumage=0)
         provider = PaydirektProvider(API_KEY, SECRET, capture=False)
         request = MagicMock()
-        request.body = json.dumps(order_approve_data)
+        request.POST = order_approve_data
         provider.process_data(payment, request)
 
         def return_url_data(url, *args, **kwargs):
             response = MagicMock()
             response.status_code = 200
             if url == provider.path_token.format(provider.endpoint):
-                response.text = json.dumps(token_retrieve)
+                response.text = json.dumps(token_retrieve, use_decimal=True)
             elif url == provider.path_capture.format(provider.endpoint, payment.transaction_id):
-                response.text = json.dumps(capture_response)
+                response.text = json.dumps(capture_response, use_decimal=True)
             elif url == provider.path_refund.format(provider.endpoint, payment.transaction_id):
-                response.text = json.dumps(refund_response)
+                response.text = json.dumps(refund_response, use_decimal=True)
             elif url == provider.path_close.format(provider.endpoint, payment.transaction_id):
-                response.text = json.dumps(order_close_data)
+                response.text = json.dumps(order_close_data, use_decimal=True)
             else:
                 raise Exception(url)
             return response
+        get_base_url.return_value = "https://example.com"
         mocked_post.side_effect = return_url_data
 
         ret = provider.capture(payment)
@@ -369,9 +373,10 @@ class TestPaydirektProvider(TestCase):
         self.assertEqual(payment.status, PaymentStatus.REFUNDED)
         self.assertEqual(payment.captured_amount, Decimal("100.0"))
 
+    @patch("web_payments.core.get_base_url")
     @patch("requests.post")
     @patch("requests.get")
-    def test_refund_fail(self, mocked_get, mocked_post):
+    def test_refund_fail(self, mocked_get, mocked_post, get_base_url):
         payment = Payment(minimumage=0)
         provider = PaydirektProvider(API_KEY, SECRET, capture=False)
         def return_get_data(url, *args, **kwargs):
@@ -387,51 +392,55 @@ class TestPaydirektProvider(TestCase):
             else:
                 raise
             return response
+        get_base_url.return_value = "https://example.com"
         mocked_get.side_effect = return_get_data
         mocked_post.side_effect = return_post_data
         request = MagicMock()
-        request.body = json.dumps(order_approve_data)
+        request.POST = order_approve_data
         provider.process_data(payment, request)
 
         self.assertEqual(payment.status, PaymentStatus.PREAUTH)
         self.assertEqual(payment.captured_amount, Decimal(0))
         d = refund_process_data.copy()
         d["refundStatus"] = "FAILED"
-        request.body = json.dumps(d)
+        request.POST = d
         response = provider.process_data(payment, request)
         self.assertEqual(payment.captured_amount, Decimal(100))
         self.assertEqual(payment.status, PaymentStatus.ERROR)
 
+    @patch("web_payments.core.get_base_url")
     @patch("requests.post")
     @patch("requests.get")
-    def test_capture_fail(self, mocked_get, mocked_post):
+    def test_capture_fail(self, mocked_get, mocked_post, get_base_url):
         payment = Payment(minimumage=0, captured_amount=Decimal(100))
         provider = PaydirektProvider(API_KEY, SECRET, capture=False)
         def return_get_data(url, *args, **kwargs):
             response = MagicMock()
             response.status_code = 200
-            response.text = json.dumps(get_100_capture)
+            response.text = json.dumps(get_100_capture, use_decimal=True)
             return response
 
         def return_post_data(url, *args, **kwargs):
             response = MagicMock()
             response.status_code = 200
             if url == provider.path_token.format(provider.endpoint):
-                response.text = json.dumps(token_retrieve)
+                response.text = json.dumps(token_retrieve, use_decimal=True)
             else:
                 raise
             return response
+        get_base_url.return_value = "https://example.com"
         mocked_get.side_effect = return_get_data
         mocked_post.side_effect = return_post_data
         request = MagicMock()
-        request.body = json.dumps(order_approve_data)
+        request.POST = order_approve_data
         provider.process_data(payment, request)
 
         self.assertEqual(payment.status, PaymentStatus.PREAUTH)
         self.assertEqual(payment.captured_amount, Decimal(100))
         d = capture_process_data.copy()
         d["captureStatus"] = "FAILED"
-        request.body = json.dumps(d)
+        request.POST = d
         response = provider.process_data(payment, request)
+        self.assertEqual(response, True)
         self.assertEqual(payment.captured_amount, Decimal(0))
         self.assertEqual(payment.status, PaymentStatus.ERROR)

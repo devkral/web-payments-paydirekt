@@ -10,16 +10,15 @@ PACKAGES = [
     'web_payments_paydirekt']
 
 REQUIREMENTS = [
-    'web-payments-connector<2.0.0']
+    'web-payments-connector>=2.0.0b5<3.0.0a']
 
 TEST_REQUIREMENTS = [
-    'pytest',
-    'pytest-django'
+    'pytest'
 ]
 
 VERSIONING = {
     'root': '.',
-    'version_scheme': 'post-release',
+    'version_scheme': 'guess-next-dev',
     'local_scheme': 'dirty-tag',
 }
 

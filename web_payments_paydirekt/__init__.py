@@ -17,7 +17,8 @@ import requests
 from requests.exceptions import Timeout
 from django.http import HttpResponseForbidden, HttpResponse
 
-from web_payments import PaymentError, PaymentStatus, RedirectNeeded
+from web_payments import PaymentError, RedirectNeeded
+from web_payments.status import PaymentStatus
 from web_payments.logic import BasicProvider
 from web_payments.utils import split_streetnr
 
@@ -211,57 +212,52 @@ class PaydirektProvider(BasicProvider):
         raise RedirectNeeded(json_response["_links"]["approve"]["href"])
 
     def process_data(self, payment, request):
-        try:
-            results = json.loads(request.body, use_decimal=True)
-        except (ValueError, TypeError):
-            logger.error("paydirekt returned unparseable object")
-            return HttpResponseForbidden('FAILED')
         # ignore invalid requests
-        if "checkoutId" not in results:
-            return HttpResponse('OK')
+        if "checkoutId" not in request.POST:
+            return True
         if not payment.transaction_id:
-            payment.transaction_id = results["checkoutId"]
+            payment.transaction_id = request.POST["checkoutId"]
             payment.save()
-        if "checkoutStatus" in results:
-            if results["checkoutStatus"] == "APPROVED":
+        if "checkoutStatus" in request.POST:
+            if request.POST["checkoutStatus"] == "APPROVED":
                 if self._capture:
                     payment.change_status(PaymentStatus.CONFIRMED)
                 else:
                     payment.change_status(PaymentStatus.PREAUTH)
-            elif results["checkoutStatus"] == "CLOSED":
+            elif request.POST["checkoutStatus"] == "CLOSED":
                 if payment.status != PaymentStatus.REFUNDED:
                     payment.change_status(PaymentStatus.CONFIRMED)
                 elif payment.status == PaymentStatus.PREAUTH and payment.captured_amount == 0:
                     payment.change_status(PaymentStatus.REFUNDED)
-            elif not results["checkoutStatus"] in ["OPEN", "PENDING"]:
+            elif not request.POST["checkoutStatus"] in ["OPEN", "PENDING"]:
                 payment.change_status(PaymentStatus.ERROR)
-        elif "refundStatus" in results:
-            if results["refundStatus"] == "FAILED":
+        elif "refundStatus" in request.POST:
+            if request.POST["refundStatus"] == "FAILED":
                 logger.error("refund failed, try to recover")
-                amount = self._retrieve_amount("/".join([self.path_refund.format(self.endpoint, payment.transaction_id), results["transactionId"]]))
+                amount = self._retrieve_amount("/".join([self.path_refund.format(self.endpoint, payment.transaction_id), request.POST["transactionId"]]))
                 if not amount:
                     logger.error("refund recovery failed")
                     payment.change_status(PaymentStatus.ERROR)
-                    return HttpResponseForbidden('FAILED')
+                    return False
                 logger.error("refund recovery successfull")
                 payment.captured_amount += amount
                 payment.save()
                 payment.change_status(PaymentStatus.ERROR)
-        elif "captureStatus" in results:
+        elif "captureStatus" in request.POST:
             # e.g. if not enough money or capture limit reached
-            if results["captureStatus"] == "FAILED":
+            if request.POST["captureStatus"] == "FAILED":
                 logger.error("capture failed, try to recover")
-                amount = self._retrieve_amount("/".join([self.path_capture.format(self.endpoint, payment.transaction_id), results["transactionId"]]))
+                amount = self._retrieve_amount("/".join([self.path_capture.format(self.endpoint, payment.transaction_id), request.POST["transactionId"]]))
                 if not amount:
                     logger.error("capture recovery failed")
                     payment.change_status(PaymentStatus.ERROR)
-                    return HttpResponseForbidden('FAILED')
+                    return False
                 logger.error("capture recovery successfull")
                 payment.captured_amount -= amount
                 payment.save()
                 payment.change_status(PaymentStatus.ERROR)
         payment.save()
-        return HttpResponse('OK')
+        return True
 
     def capture(self, payment, amount=None, final=True):
         if not amount:
