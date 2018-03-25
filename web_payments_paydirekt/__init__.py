@@ -83,9 +83,11 @@ class PaydirektProvider(BasicProvider):
     }
 
     def __init__(self, api_key, secret, endpoint="https://api.sandbox.paydirekt.de",
-                 overcapture=False, default_carttype="PHYSICAL", **kwargs):
+                 overcapture=False, default_carttype="PHYSICAL",
+                 timeout=20, **kwargs):
         self.secret_b64 = secret.encode('utf-8')
         self.api_key = api_key
+        self.timeout = timeout
         self.endpoint = endpoint
         self.overcapture = overcapture
         self.default_carttype = default_carttype
@@ -110,7 +112,7 @@ class PaydirektProvider(BasicProvider):
             "randomNonce" : str(nonce, "ascii")
         }
         try:
-            response = requests.post(self.path_token.format(self.endpoint), data=json.dumps(body, use_decimal=True), headers=header, timeout=20)
+            response = requests.post(self.path_token.format(self.endpoint), data=json.dumps(body, use_decimal=True), headers=header, timeout=self.timeout)
         except Timeout:
             raise PaymentError("Timeout")
 
@@ -132,7 +134,7 @@ class PaydirektProvider(BasicProvider):
 
     def _retrieve_amount(self, url):
         try:
-            ret = requests.get(url, timeout=20)
+            ret = requests.get(url, timeout=self.timeout)
         except Timeout:
             logger.error("paydirekt had timeout")
             return None
@@ -200,7 +202,7 @@ class PaydirektProvider(BasicProvider):
             body["items"] = items
 
         try:
-            response = requests.post(self.path_checkout.format(self.endpoint), data=json.dumps(body, use_decimal=True), headers=headers, timeout=20)
+            response = requests.post(self.path_checkout.format(self.endpoint), data=json.dumps(body, use_decimal=True), headers=headers, timeout=self.timeout)
         except Timeout:
             raise PaymentError("Timeout")
         json_response = json.loads(response.text, use_decimal=True)
@@ -276,7 +278,7 @@ class PaydirektProvider(BasicProvider):
         }
         try:
             response = requests.post(self.path_capture.format(self.endpoint, payment.transaction_id),
-                                     data=json.dumps(body, use_decimal=True), headers=header, timeout=20)
+                                     data=json.dumps(body, use_decimal=True), headers=header, timeout=self.timeout)
         except Timeout:
             raise PaymentError("Timeout")
         json_response = json.loads(response.text, use_decimal=True)
@@ -294,7 +296,7 @@ class PaydirektProvider(BasicProvider):
         }
         try:
             response = requests.post(self.path_refund.format(self.endpoint, payment.transaction_id), \
-                                     data=json.dumps(body, use_decimal=True), headers=header, timeout=20)
+                                     data=json.dumps(body, use_decimal=True), headers=header, timeout=self.timeout)
         except Timeout:
             raise PaymentError("Timeout")
         json_response = json.loads(response.text, use_decimal=True)
