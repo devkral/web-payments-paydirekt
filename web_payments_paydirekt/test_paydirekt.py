@@ -6,8 +6,7 @@ from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 from . import PaydirektProvider
-from web_payments import PaymentError, RedirectNeeded
-from web_payments.status import PaymentStatus
+from web_payments import PaymentError, RedirectNeeded, PaymentStatus
 from web_payments.testcommon import create_test_payment
 
 VARIANT = 'paydirekt'

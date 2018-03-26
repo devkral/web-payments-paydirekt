@@ -2,39 +2,27 @@
 
 import uuid
 from datetime import datetime as dt
+from datetime import timezone
 
+from email.utils import format_datetime
 from decimal import Decimal
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 import os
+import time
 import hmac
 # for hmac and hashed email
 import hashlib
 import simplejson as json
-import time
 import logging
 
 import requests
 from requests.exceptions import Timeout
-from django.http import HttpResponseForbidden, HttpResponse
 
-from web_payments import PaymentError, RedirectNeeded
-from web_payments.status import PaymentStatus
+from web_payments import PaymentError, RedirectNeeded, PaymentStatus
 from web_payments.logic import BasicProvider
 from web_payments.utils import split_streetnr
 
 logger = logging.getLogger(__name__)
-
-
-# from email utils, for python 2+3 support
-def format_timetuple_and_zone(timetuple, zone):
-    return '%s, %02d %s %04d %02d:%02d:%02d %s' % (
-        ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][timetuple[6]],
-        timetuple[2],
-        ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][timetuple[1] - 1],
-        timetuple[0], timetuple[3], timetuple[4], timetuple[5],
-        zone)
-
 
 def check_response(response, response_json=None):
     if response.status_code not in [200, 201]:
@@ -97,7 +85,7 @@ class PaydirektProvider(BasicProvider):
         """ Retrieves oauth Token and save it as instance variable """
         token_uuid = str(uuid.uuid4()).encode("utf-8")
         nonce = urlsafe_b64encode(os.urandom(48))
-        date_now = dt.utcnow()
+        date_now = dt.now(timezone.utc)
         bytessign = token_uuid+b":"+date_now.strftime("%Y%m%d%H%M%S").encode('utf-8')+b":"+self.api_key.encode('utf-8')+b":"+nonce
         h_temp = hmac.new(urlsafe_b64decode(self.secret_b64), msg=bytessign, digestmod=hashlib.sha256)
 
@@ -106,7 +94,7 @@ class PaydirektProvider(BasicProvider):
         header["X-Request-ID"] = token_uuid
 
         header["X-Auth-Code"] = str(urlsafe_b64encode(h_temp.digest()), 'ascii')
-        header["Date"] = format_timetuple_and_zone(date_now.utctimetuple(), "GMT")
+        header["Date"] = format_datetime(date_now, usegmt=True)
         body = {
             "grantType" : "api_key",
             "randomNonce" : str(nonce, "ascii")
