@@ -204,8 +204,13 @@ class PaydirektProvider(BasicProvider):
         raise RedirectNeeded(json_response["_links"]["approve"]["href"])
 
     def process_data(self, payment, request):
-        # ignore invalid requests
+        # log invalid requests
+        # and ignore (return 200)
+        if not hasattr(request.POST, "__getitem__"):
+            logging.warning("invalid request type: %s, request: %s", request.content_type, request.POST)
+            return True
         if "checkoutId" not in request.POST:
+            logging.warning("invalid request: %s", request.POST)
             return True
         if not payment.transaction_id:
             payment.transaction_id = request.POST["checkoutId"]
