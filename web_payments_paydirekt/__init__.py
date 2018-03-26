@@ -24,6 +24,8 @@ from web_payments.utils import split_streetnr
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["PaydirektProvider"]
+
 def check_response(response, response_json=None):
     if response.status_code not in [200, 201]:
         if response_json:
