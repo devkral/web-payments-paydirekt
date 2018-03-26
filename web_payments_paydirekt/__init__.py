@@ -161,7 +161,7 @@ class PaydirektProvider(BasicProvider):
             "minimumAge": getattr(payment, "minimumage", None)
         }
         if body["type"] == "DIRECT_SALE":
-            body["note"] = payment.description[:37]
+            body["note"] = payment.message[:37]
         if self.overcapture and body["type"] in ["ORDER", "ORDER_SECURED"]:
             body["overcapture"] = True
 
@@ -179,7 +179,7 @@ class PaydirektProvider(BasicProvider):
             "city": shipping["city"],
             "countryCode": shipping["country_code"],
             "state": shipping["country_area"],
-            "emailAddress": payment.billing_email
+            "emailAddress": shipping.get("email", None)
         }
         # strip Nones
         shipping = {k: v for k, v in shipping.items() if v}
