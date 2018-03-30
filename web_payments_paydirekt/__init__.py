@@ -141,14 +141,15 @@ class PaydirektProvider(BasicProvider):
         headers = PaydirektProvider.header_default.copy()
         headers["Authorization"] = "Bearer %s" % self.retrieve_oauth_token()
         email_hash = hashlib.sha256(payment.billing_email.encode("utf-8")).digest()
+        extras = payment.get_payment_extra()
         body = {
             "type": "ORDER" if not self._capture else "DIRECT_SALE",
             "totalAmount": payment.total,
-            "shippingAmount": payment.delivery,
-            "orderAmount": payment.total - payment.delivery,
+            "shippingAmount": extras["delivery"],
+            "orderAmount": payment.total - extras["delivery"],
             "currency": payment.currency,
             "refundLimit": 100,
-            "shoppingCartType": getattr(payment, "carttype", self.default_carttype),
+            "shoppingCartType": extras.get("type", self.default_carttype),
             # payment id can repeat if different shop systems are used
             "merchantOrderReferenceNumber": "%s:%s" % (hex(int(time.time()))[2:], payment.id),
             "redirectUrlAfterSuccess": payment.get_success_url(),
@@ -158,10 +159,10 @@ class PaydirektProvider(BasicProvider):
             "callbackUrlStatusUpdates": payment.get_process_url(),
             # email sent anyway (shipping)
             "sha256hashedEmailAddress": str(urlsafe_b64encode(email_hash), 'ascii'),
-            "minimumAge": getattr(payment, "minimumage", None)
+            "minimumAge": extras.get("minimumage", None)
         }
-        if body["type"] == "DIRECT_SALE":
-            body["note"] = payment.message[:37]
+        if body["type"] == "DIRECT_SALE" and "message" in extra:
+            body["note"] = extra["message"][:37]
         if self.overcapture and body["type"] in ["ORDER", "ORDER_SECURED"]:
             body["overcapture"] = True
 
