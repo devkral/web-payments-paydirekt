@@ -164,7 +164,7 @@ class PaydirektProvider(BasicProvider):
             "sha256hashedEmailAddress": email_hash,
             "minimumAge": extras.get("minimumage", None)
         }
-        if body["type"] == "DIRECT_SALE" and "message" in extra:
+        if body["type"] == "DIRECT_SALE" and "message" in extras:
             body["note"] = extra["message"][:37]
         if self.overcapture and body["type"] in ["ORDER", "ORDER_SECURED"]:
             body["overcapture"] = True
