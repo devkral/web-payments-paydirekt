@@ -140,8 +140,11 @@ class PaydirektProvider(BasicProvider):
             payment.save()
         headers = PaydirektProvider.header_default.copy()
         headers["Authorization"] = "Bearer %s" % self.retrieve_oauth_token()
-        email_hash = hashlib.sha256(payment.billing_email.encode("utf-8")).digest()
         extras = payment.get_payment_extra()
+        shipping = payment.get_shipping_address()
+        email_hash = None
+        if "email" in shipping:
+            email_hash = str(urlsafe_b64encode(hashlib.sha256(shipping["email"].encode("utf-8")).digest()), 'ascii')
         body = {
             "type": "ORDER" if not self._capture else "DIRECT_SALE",
             "totalAmount": payment.total,
@@ -158,7 +161,7 @@ class PaydirektProvider(BasicProvider):
             "redirectUrlAfterAgeVerificationFailure": payment.get_failure_url(),
             "callbackUrlStatusUpdates": payment.get_process_url(),
             # email sent anyway (shipping)
-            "sha256hashedEmailAddress": str(urlsafe_b64encode(email_hash), 'ascii'),
+            "sha256hashedEmailAddress": email_hash,
             "minimumAge": extras.get("minimumage", None)
         }
         if body["type"] == "DIRECT_SALE" and "message" in extra:
@@ -166,7 +169,6 @@ class PaydirektProvider(BasicProvider):
         if self.overcapture and body["type"] in ["ORDER", "ORDER_SECURED"]:
             body["overcapture"] = True
 
-        shipping = payment.get_shipping_address()
         street, streetnr = split_streetnr(shipping["address_1"], "0")
 
         shipping = {
