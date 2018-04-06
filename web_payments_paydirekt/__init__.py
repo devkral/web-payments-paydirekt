@@ -145,11 +145,13 @@ class PaydirektProvider(BasicProvider):
         email_hash = None
         if "email" in shipping:
             email_hash = str(urlsafe_b64encode(hashlib.sha256(shipping["email"].encode("utf-8")).digest()), 'ascii')
+        total = payment.total.quantize(Decimal('0.01'))
+        delivery = extras["delivery"].quantize(Decimal('0.01'))
         body = {
             "type": "ORDER" if not self._capture else "DIRECT_SALE",
-            "totalAmount": payment.total,
-            "shippingAmount": extras["delivery"],
-            "orderAmount": payment.total - extras["delivery"],
+            "totalAmount": total,
+            "shippingAmount": delivery,
+            "orderAmount": total - delivery,
             "currency": payment.currency,
             "refundLimit": 100,
             "shoppingCartType": extras.get("type", self.default_carttype),
@@ -262,7 +264,7 @@ class PaydirektProvider(BasicProvider):
     def capture(self, payment, amount=None, final=True):
         if not amount:
             amount = payment.total
-        if not amount: raise Exception(self.total)
+        if not amount: raise Exception(payment.total)
         if self.overcapture and amount > payment.total*Decimal("1.1"):
             return None
         elif not self.overcapture and amount > payment.total:
@@ -270,7 +272,7 @@ class PaydirektProvider(BasicProvider):
         header = PaydirektProvider.header_default.copy()
         header["Authorization"] = "Bearer %s" % self.retrieve_oauth_token()
         body = {
-            "amount": amount,
+            "amount": amount.quantize(Decimal('0.01')),
             "finalCapture": final,
             "callbackUrlStatusUpdates": payment.get_process_url()
         }
@@ -286,10 +288,11 @@ class PaydirektProvider(BasicProvider):
     def refund(self, payment, amount=None):
         if not amount:
             amount = payment.captured_amount
+        if not amount: raise Exception(payment.total)
         header = PaydirektProvider.header_default.copy()
         header["Authorization"] = "Bearer %s" % self.retrieve_oauth_token()
         body = {
-            "amount": amount,
+            "amount": amount.quantize(Decimal('0.01')),
             "callbackUrlStatusUpdates": payment.get_process_url()
         }
         try:
