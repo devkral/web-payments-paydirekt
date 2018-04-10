@@ -84,7 +84,7 @@ class PaydirektProvider(BasicProvider):
         super(PaydirektProvider, self).__init__(**kwargs)
 
     def retrieve_oauth_token(self):
-        """ Retrieves oauth Token and save it as instance variable """
+        """ Retrieves oauth Token, don't reuse because of multithreading issues """
         token_uuid = str(uuid.uuid4()).encode("utf-8")
         nonce = urlsafe_b64encode(os.urandom(48))
         date_now = dt.now(timezone.utc)

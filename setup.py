@@ -4,8 +4,6 @@ from setuptools.command.test import test as TestCommand
 import os
 import sys
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'test_settings')
-
 PACKAGES = [
     'web_payments_paydirekt']
 
