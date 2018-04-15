@@ -1,8 +1,6 @@
 """ paydirekt payment provider """
 
 import uuid
-from datetime import datetime as dt
-from datetime import timezone
 
 from email.utils import format_datetime
 from decimal import Decimal
@@ -26,16 +24,8 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["PaydirektProvider"]
 
-def check_response(response, response_json=None):
-    if response.status_code not in [200, 201]:
-        if response_json:
-            try:
-                errorcode = response_json["messages"][0]["code"] if "messages" in response_json and len(response_json["messages"]) > 0 else None
-                raise PaymentError("{}\n--------------------\n{}".format(response.status_code, response_json), code=errorcode)
-            except KeyError:
-                raise PaymentError(str(response.status_code))
-        else:
-            raise PaymentError(str(response.status_code))
+
+CENTS = Decimal("0.01")
 
 
 # Capture: if False ORDER is used
@@ -81,13 +71,39 @@ class PaydirektProvider(BasicProvider):
         self.endpoint = endpoint
         self.overcapture = overcapture
         self.default_carttype = default_carttype
+        if "time_reserve" in kwargs:
+            kwargs["time_reserve"] += datetime.timedelta(seconds=5)
+        else:
+            kwargs["time_reserve"] = datetime.timedelta(seconds=5)
         super(PaydirektProvider, self).__init__(**kwargs)
 
-    def retrieve_oauth_token(self):
-        """ Retrieves oauth Token, don't reuse because of multithreading issues """
+    def send_request(self, url, data, headers, add_token=True):
+        if add_token:
+            headers["Authorization"] = "Bearer %s" % self.token
+        try:
+            response = requests.post(url, data, headers=header, timeout=self.timeout)
+        except Timeout:
+            raise PaymentError("Timeout")
+        try:
+            response_json = json.loads(response.text, use_decimal=True)
+        except Exception:
+            response_json = None
+
+        if response.status_code not in [200, 201]:
+            if response_json:
+                try:
+                    errorcode = response_json["messages"][0]["code"] if "messages" in response_json and len(response_json["messages"]) > 0 else None
+                    raise PaymentError("{}\n--------------------\n{}".format(response.status_code, response_json), code=errorcode)
+                except KeyError:
+                    raise PaymentError(str(response.status_code))
+            else:
+                raise PaymentError(str(response.status_code))
+    return response_json
+
+    def get_auth_token(self, date_now):
+        """ Retrieves oauth Token """
         token_uuid = str(uuid.uuid4()).encode("utf-8")
         nonce = urlsafe_b64encode(os.urandom(48))
-        date_now = dt.now(timezone.utc)
         bytessign = token_uuid+b":"+date_now.strftime("%Y%m%d%H%M%S").encode('utf-8')+b":"+self.api_key.encode('utf-8')+b":"+nonce
         h_temp = hmac.new(urlsafe_b64decode(self.secret_b64), msg=bytessign, digestmod=hashlib.sha256)
 
@@ -101,15 +117,8 @@ class PaydirektProvider(BasicProvider):
             "grantType" : "api_key",
             "randomNonce" : str(nonce, "ascii")
         }
-        try:
-            response = requests.post(self.path_token.format(self.endpoint), data=json.dumps(body, use_decimal=True), headers=header, timeout=self.timeout)
-        except Timeout:
-            raise PaymentError("Timeout")
-
-        token_raw = json.loads(response.text, use_decimal=True)
-        check_response(response, token_raw)
-
-        return token_raw["access_token"]
+        token_raw = self.send_request(self.path_token.format(self.endpoint), data=json.dumps(body, use_decimal=True), headers=header, add_token=False)
+        return token_raw["access_token"], date_now+timedelta(seconds=token_raw["expires_in"])
 
     def _prepare_items(self, payment):
         items = []
@@ -117,7 +126,7 @@ class PaydirektProvider(BasicProvider):
             items.append({
                 "name": newitem.name,
                 # limit to 2 decimal_places even 4 decimal_places should be possible
-                "price": newitem.price.quantize(Decimal('0.01')),
+                "price": newitem.price.quantize(CENTS),
                 "quantity": int(newitem.quantity)
             })
         return items
@@ -139,14 +148,13 @@ class PaydirektProvider(BasicProvider):
         if not payment.id:
             payment.save()
         headers = PaydirektProvider.header_default.copy()
-        headers["Authorization"] = "Bearer %s" % self.retrieve_oauth_token()
         extras = payment.get_payment_extra()
         shipping = payment.get_shipping_address()
         email_hash = None
         if "email" in shipping:
             email_hash = str(urlsafe_b64encode(hashlib.sha256(shipping["email"].encode("utf-8")).digest()), 'ascii')
-        total = payment.total.quantize(Decimal('0.01'))
-        delivery = extras["delivery"].quantize(Decimal('0.01'))
+        total = payment.total.quantize(CENTS)
+        delivery = extras["delivery"].quantize(CENTS)
         body = {
             "type": "ORDER" if not self._capture else "DIRECT_SALE",
             "totalAmount": total,
@@ -196,13 +204,8 @@ class PaydirektProvider(BasicProvider):
         if len(items) > 0:
             body["items"] = items
 
-        try:
-            response = requests.post(self.path_checkout.format(self.endpoint), data=json.dumps(body, use_decimal=True), headers=headers, timeout=self.timeout)
-        except Timeout:
-            raise PaymentError("Timeout")
-        json_response = json.loads(response.text, use_decimal=True)
+        json_response = self.send_request(self.path_checkout.format(self.endpoint), data=json.dumps(body, use_decimal=True), headers=headers)
 
-        check_response(response, json_response)
         payment.transaction_id = json_response["checkoutId"]
         # payment.attrs = json_response["_links"]
         payment.save()
@@ -264,44 +267,36 @@ class PaydirektProvider(BasicProvider):
     def capture(self, payment, amount=None, final=True):
         if not amount:
             amount = payment.total
-        if not amount: raise Exception(payment.total)
+        if not amount:
+            raise Exception(payment.total)
         if self.overcapture and amount > payment.total*Decimal("1.1"):
             return None
         elif not self.overcapture and amount > payment.total:
             return None
-        header = PaydirektProvider.header_default.copy()
-        header["Authorization"] = "Bearer %s" % self.retrieve_oauth_token()
+        headers = PaydirektProvider.header_default.copy()
         body = {
-            "amount": amount.quantize(Decimal('0.01')),
+            "amount": amount.quantize(CENTS),
             "finalCapture": final,
             "callbackUrlStatusUpdates": payment.get_process_url()
         }
-        try:
-            response = requests.post(self.path_capture.format(self.endpoint, payment.transaction_id),
-                                     data=json.dumps(body, use_decimal=True), headers=header, timeout=self.timeout)
-        except Timeout:
-            raise PaymentError("Timeout")
-        json_response = json.loads(response.text, use_decimal=True)
-        check_response(response, json_response)
+        json_response = self.send_request(self.path_capture.format(self.endpoint, payment.transaction_id),
+                                          data=json.dumps(body, use_decimal=True),
+                                          headers=headers)
         return amount
 
     def refund(self, payment, amount=None):
         if not amount:
             amount = payment.captured_amount
-        if not amount: raise Exception(payment.total)
-        header = PaydirektProvider.header_default.copy()
-        header["Authorization"] = "Bearer %s" % self.retrieve_oauth_token()
+        if not amount:
+            raise Exception(payment.total)
+        headers = PaydirektProvider.header_default.copy()
         body = {
-            "amount": amount.quantize(Decimal('0.01')),
+            "amount": amount.quantize(CENTS),
             "callbackUrlStatusUpdates": payment.get_process_url()
         }
-        try:
-            response = requests.post(self.path_refund.format(self.endpoint, payment.transaction_id), \
-                                     data=json.dumps(body, use_decimal=True), headers=header, timeout=self.timeout)
-        except Timeout:
-            raise PaymentError("Timeout")
-        json_response = json.loads(response.text, use_decimal=True)
-        check_response(response, json_response)
+        json_response = self.send_request(self.path_capture.format(self.endpoint, payment.transaction_id),
+                                          data=json.dumps(body, use_decimal=True),
+                                          headers=headers)
         if payment.status == PaymentStatus.PREAUTH and amount == payment.captured_amount:
             # logic, elsewise multiple signals are emitted CONFIRMED -> REFUNDED
             payment.change_status(PaymentStatus.REFUNDED)

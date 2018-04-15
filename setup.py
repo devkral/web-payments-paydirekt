@@ -8,7 +8,7 @@ PACKAGES = [
     'web_payments_paydirekt']
 
 REQUIREMENTS = [
-    'web-payments-connector>=2.1.0b1<3.0.0a',
+    'web-payments-connector>=2.2.0<3.0.0a',
     'requests>=2.16.0'
 ]
 
