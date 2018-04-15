@@ -7,6 +7,7 @@ from decimal import Decimal
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 import os
 import time
+import datetime
 import hmac
 # for hmac and hashed email
 import hashlib
@@ -77,11 +78,11 @@ class PaydirektProvider(BasicProvider):
             kwargs["time_reserve"] = datetime.timedelta(seconds=5)
         super(PaydirektProvider, self).__init__(**kwargs)
 
-    def send_request(self, url, data, headers, add_token=True):
+    def send_request(self, url, data=None, headers=None, add_token=True):
         if add_token:
             headers["Authorization"] = "Bearer %s" % self.token
         try:
-            response = requests.post(url, data, headers=header, timeout=self.timeout)
+            response = requests.post(url, data, headers=headers, timeout=self.timeout)
         except Timeout:
             raise PaymentError("Timeout")
         try:
@@ -98,7 +99,7 @@ class PaydirektProvider(BasicProvider):
                     raise PaymentError(str(response.status_code))
             else:
                 raise PaymentError(str(response.status_code))
-    return response_json
+        return response_json
 
     def get_auth_token(self, date_now):
         """ Retrieves oauth Token """
@@ -107,18 +108,18 @@ class PaydirektProvider(BasicProvider):
         bytessign = token_uuid+b":"+date_now.strftime("%Y%m%d%H%M%S").encode('utf-8')+b":"+self.api_key.encode('utf-8')+b":"+nonce
         h_temp = hmac.new(urlsafe_b64decode(self.secret_b64), msg=bytessign, digestmod=hashlib.sha256)
 
-        header = PaydirektProvider.header_default.copy()
-        header["X-Auth-Key"] = self.api_key
-        header["X-Request-ID"] = token_uuid
+        headers = PaydirektProvider.header_default.copy()
+        headers["X-Auth-Key"] = self.api_key
+        headers["X-Request-ID"] = token_uuid
 
-        header["X-Auth-Code"] = str(urlsafe_b64encode(h_temp.digest()), 'ascii')
-        header["Date"] = format_datetime(date_now, usegmt=True)
+        headers["X-Auth-Code"] = str(urlsafe_b64encode(h_temp.digest()), 'ascii')
+        headers["Date"] = format_datetime(date_now, usegmt=True)
         body = {
             "grantType" : "api_key",
             "randomNonce" : str(nonce, "ascii")
         }
-        token_raw = self.send_request(self.path_token.format(self.endpoint), data=json.dumps(body, use_decimal=True), headers=header, add_token=False)
-        return token_raw["access_token"], date_now+timedelta(seconds=token_raw["expires_in"])
+        token_raw = self.send_request(self.path_token.format(self.endpoint), data=json.dumps(body, use_decimal=True), headers=headers, add_token=False)
+        return token_raw["access_token"], date_now+datetime.timedelta(seconds=token_raw["expires_in"])
 
     def _prepare_items(self, payment):
         items = []
@@ -294,15 +295,15 @@ class PaydirektProvider(BasicProvider):
             "amount": amount.quantize(CENTS),
             "callbackUrlStatusUpdates": payment.get_process_url()
         }
-        json_response = self.send_request(self.path_capture.format(self.endpoint, payment.transaction_id),
+        json_response = self.send_request(self.path_refund.format(self.endpoint, payment.transaction_id),
                                           data=json.dumps(body, use_decimal=True),
                                           headers=headers)
         if payment.status == PaymentStatus.PREAUTH and amount == payment.captured_amount:
             # logic, elsewise multiple signals are emitted CONFIRMED -> REFUNDED
             payment.change_status(PaymentStatus.REFUNDED)
             try:
-                response = requests.post(self.path_close.format(self.endpoint, payment.transaction_id), \
-                                         headers=header)
+                response = self.send_request(self.path_close.format(self.endpoint, payment.transaction_id),
+                                             headers=headers)
             except Timeout:
                 logger.error("Closing order failed")
         return amount
