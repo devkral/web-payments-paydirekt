@@ -41,8 +41,6 @@ class PaydirektProvider(BasicProvider):
     endpoint:
         which endpoint to use
     '''
-    access_token = None
-    expires_in = None
 
     path_token = "{}/api/merchantintegration/v1/token/obtain"
     path_checkout = "{}/api/checkout/v1/checkouts"
@@ -72,10 +70,6 @@ class PaydirektProvider(BasicProvider):
         self.endpoint = endpoint
         self.overcapture = overcapture
         self.default_carttype = default_carttype
-        if "time_reserve" in kwargs:
-            kwargs["time_reserve"] += datetime.timedelta(seconds=5)
-        else:
-            kwargs["time_reserve"] = datetime.timedelta(seconds=5)
         super(PaydirektProvider, self).__init__(**kwargs)
 
     def send_request(self, url, data=None, headers=None, add_token=True):
@@ -92,6 +86,16 @@ class PaydirektProvider(BasicProvider):
 
         if response.status_code not in [200, 201]:
             if response_json:
+                if add_token:
+                    isexpired = False
+                    try:
+                        for i in response_json["messages"]:
+                            if i["code"] == "ACCESS_TOKEN_EXPIRED":
+                                isexpired = True
+                    except Exception:
+                        pass
+                    if isexpired:
+                        return self.send_request(url, data, headers, add_token)
                 try:
                     errorcode = response_json["messages"][0]["code"] if "messages" in response_json and len(response_json["messages"]) > 0 else None
                     raise PaymentError("{}\n--------------------\n{}".format(response.status_code, response_json), code=errorcode)
@@ -119,7 +123,8 @@ class PaydirektProvider(BasicProvider):
             "randomNonce" : str(nonce, "ascii")
         }
         token_raw = self.send_request(self.path_token.format(self.endpoint), data=json.dumps(body, use_decimal=True), headers=headers, add_token=False)
-        return token_raw["access_token"], date_now+datetime.timedelta(seconds=token_raw["expires_in"])
+        # recovery from token expired time expensive and untested
+        return token_raw["access_token"], date_now+datetime.timedelta(seconds=token_raw["expires_in"]-5)
 
     def _prepare_items(self, payment):
         items = []
