@@ -1,8 +1,7 @@
 [run]
 branch = 1
 omit =
-    web_payments_paydirekt/test_*.py
-    web_payments_paydirekt/*/test_*.py
+    tests/*
 source = web_payments_paydirekt
 
 [report]

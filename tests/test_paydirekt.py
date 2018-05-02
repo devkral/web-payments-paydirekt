@@ -5,7 +5,7 @@ from decimal import Decimal
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
-from . import PaydirektProvider
+from web_payments_paydirekt import PaydirektProvider
 from web_payments import PaymentError, RedirectNeeded, PaymentStatus
 from web_payments.testcommon import create_test_payment
 
